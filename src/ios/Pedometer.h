@@ -16,5 +16,6 @@
 - (void) stopPedometerUpdates:(CDVInvokedUrlCommand*)command;
 
 - (void) queryData:(CDVInvokedUrlCommand*)command;
+- (void) queryHistoryData:(CDVInvokedUrlCommand*)command;
 
 @end
