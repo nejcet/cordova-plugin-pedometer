@@ -113,9 +113,9 @@
 
 
 
-#define HIGH_LEVEL_MIN_STEP_COUNT 100
-#define LOW_LEVEL_TIME_INTERVAL 60*60
-#define HIGH_LEVEL_TIME_INTERVAL 1*60
+#define HIGH_LEVEL_MIN_STEP_COUNT 100.0
+#define LOW_LEVEL_TIME_INTERVAL 60.0*60.0
+#define HIGH_LEVEL_TIME_INTERVAL 1.0*60.0
 
 - (void) queryHistoryData:(CDVInvokedUrlCommand*)command;
 {
@@ -193,6 +193,8 @@
 {
     NSTimeInterval diff = [endDate timeIntervalSince1970] - [startDate timeIntervalSince1970];
     
+    NSLog(@"diff: %f < %f", diff, LOW_LEVEL_TIME_INTERVAL);
+    
     if ( diff < LOW_LEVEL_TIME_INTERVAL) {
         completionBlock([self getDateRangesWithStartDate:startDate EndDate:endDate TimeInterval:HIGH_LEVEL_TIME_INTERVAL]);
     } else {
@@ -201,12 +203,18 @@
         [self queryDataWithStartDate:startDate EndDate:endDate TimeInterval:LOW_LEVEL_TIME_INTERVAL Completion:^(NSArray *lowLevelStepData) {
             
             for (NSDictionary *lowLevelDict in lowLevelStepData) {
+                NSDate *_startDate = [lowLevelDict objectForKey:@"start"];
+                NSDate *_endDate = [lowLevelDict objectForKey:@"end"];
+                if ([_endDate timeIntervalSince1970] > [endDate timeIntervalSince1970]) {
+                    _endDate = endDate;
+                }
+                
                 if ([[lowLevelDict objectForKey:@"numberOfSteps"] integerValue] >= HIGH_LEVEL_MIN_STEP_COUNT) {
                     //NSLog(@"high level %@ - %@ => %lu", [lowLevelDict objectForKey:@"start"], [lowLevelDict objectForKey:@"end"], [[lowLevelDict objectForKey:@"numberOfSteps"] integerValue]);
-                    [ranges addObjectsFromArray:[self getDateRangesWithStartDate:[lowLevelDict objectForKey:@"start"] EndDate:[lowLevelDict objectForKey:@"end"] TimeInterval:HIGH_LEVEL_TIME_INTERVAL]];
+                    [ranges addObjectsFromArray:[self getDateRangesWithStartDate:_startDate EndDate:_endDate TimeInterval:HIGH_LEVEL_TIME_INTERVAL]];
                 } else {
                     //NSLog(@"low level %@ - %@ => %lu", [lowLevelDict objectForKey:@"start"], [lowLevelDict objectForKey:@"end"], [[lowLevelDict objectForKey:@"numberOfSteps"] integerValue]);
-                    [ranges addObject:@{@"start": [lowLevelDict objectForKey:@"start"], @"end": [lowLevelDict objectForKey:@"end"], @"summarized": @1 }];
+                    [ranges addObject:@{@"start": _startDate, @"end": _endDate, @"summarized": @1 }];
                 }
             }
             completionBlock((NSArray*)ranges);
