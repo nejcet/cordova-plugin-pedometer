@@ -113,7 +113,6 @@
 
 
 
-#define LOW_LEVEL_MIN_STEP_COUNT 100
 #define HIGH_LEVEL_MIN_STEP_COUNT 100
 #define LOW_LEVEL_TIME_INTERVAL 60*60
 #define HIGH_LEVEL_TIME_INTERVAL 1*60
@@ -127,6 +126,8 @@
     NSDate* startDate = [dateFormatter dateFromString:[args objectForKey:@"startDate"]];
     NSDate* endDate = [dateFormatter dateFromString:[args objectForKey:@"endDate"]];
     
+    //NSLog(@"queryHistoryData: %@ - %@", startDate, endDate);
+    
     __block CDVPluginResult* pluginResult = nil;
     
     if ([CMPedometer isStepCountingAvailable]) {
@@ -134,14 +135,9 @@
         NSDate *started = [NSDate date];
         
         [self queryHistoryDataWithStartDate:startDate EndDate:endDate Completion:^(NSArray *values) {
-            NSMutableArray *normalizedValues = [NSMutableArray array];
-            for (NSDictionary *value in values) {
-                [normalizedValues addObject:[self normalizeValue:value]];
-            }
             NSTimeInterval diff = [[NSDate date] timeIntervalSince1970] - [started timeIntervalSince1970];
-            NSLog(@"values count: %lu, diff: %f", (unsigned long)[normalizedValues count], diff);
-            
-            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:normalizedValues];
+            NSLog(@"values count: %lu, diff: %f", (unsigned long)[values count], diff);
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:values];
             [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
         }];
     
@@ -160,68 +156,65 @@
     return dateFormatter;
 }
 
--(NSDictionary*)normalizeValue: (NSDictionary*)value {
-    NSDateFormatter *dateFormatter = [self getIsoDateFormatter];
-    
-    NSMutableDictionary *dict = [NSMutableDictionary dictionaryWithDictionary:value];
-    NSDate *start = [dict objectForKey:@"start"];
-    NSDate *end = [dict objectForKey:@"start"];
-    [dict setValue:[dateFormatter stringFromDate:start] forKey:@"start"];
-    [dict setValue:[dateFormatter stringFromDate:end] forKey:@"end"];
-    return (NSDictionary*)dict;
-}
-
-
 -(void)queryHistoryDataWithStartDate:(NSDate*)startDate EndDate:(NSDate*)endDate Completion:(void (^)(NSArray*values))completionBlock
 {
-    NSMutableArray *values = [NSMutableArray array];
-    NSTimeInterval diff = [endDate timeIntervalSince1970] - [startDate timeIntervalSince1970];
     
-    [self queryDataWithStartDate:startDate EndDate:endDate TimeInterval:LOW_LEVEL_TIME_INTERVAL Completion:^(NSArray *lowLevelStepData) {
-        for (NSUInteger iLowLevel = 0; iLowLevel < [lowLevelStepData count]; iLowLevel++) {
-            NSDictionary *lowLevelDict = [lowLevelStepData objectAtIndex:iLowLevel];
-            
-            
-            if (diff < LOW_LEVEL_TIME_INTERVAL || [lowLevelDict[@"numberOfSteps"] integerValue] >= LOW_LEVEL_MIN_STEP_COUNT) {
-                [self queryDataWithStartDate:lowLevelDict[@"start"] EndDate:lowLevelDict[@"end"] TimeInterval:HIGH_LEVEL_TIME_INTERVAL Completion:^(NSArray *highLevelStepData) {
-                    
-                    for (NSUInteger iHighLevel=0; iHighLevel < [highLevelStepData count]; iHighLevel++) {
-                        
-                        NSMutableDictionary *highLevelDict = [NSMutableDictionary dictionaryWithDictionary:[highLevelStepData objectAtIndex:iHighLevel]];
-                        
-                        [values addObject:highLevelDict];
-                        if ( iLowLevel+1 ==  [lowLevelStepData count] && iHighLevel+1 == [highLevelStepData count] ) {
-                            completionBlock(values);
-                        }
-                        
-                    }
-                    
-                }];
+    [self buildQueryDateRanges:startDate EndDate:endDate Completion:^(NSArray *ranges) {
+        NSMutableArray *values = [NSMutableArray array];
+        NSDateFormatter *dateFormatter = [self getIsoDateFormatter];
+        
+        for (NSUInteger i=0; i < [ranges count]; i++) {
+            NSMutableDictionary *range = [NSMutableDictionary dictionaryWithDictionary:[ranges objectAtIndex:i]];
+
+            [self.pedometer queryPedometerDataFromDate:range[@"start"] toDate:range[@"end"] withHandler:^(CMPedometerData *pedometerData, NSError *error) {
                 
-            } else {
+                NSNumber *numberOfSteps = [CMPedometer isStepCountingAvailable] && pedometerData.numberOfSteps ? pedometerData.numberOfSteps : [NSNumber numberWithInt:0];
+                [range setObject:numberOfSteps forKey:@"numberOfSteps"];
                 
-                NSArray *highLevelRange = [self getDateRangesWithStartDate:lowLevelDict[@"start"] EndDate:lowLevelDict[@"end"] TimeInterval:HIGH_LEVEL_TIME_INTERVAL];
+                NSDate *start = [range objectForKey:@"start"];
+                NSDate *end = [range objectForKey:@"end"];
+                [range setValue:[dateFormatter stringFromDate:start] forKey:@"start"];
+                [range setValue:[dateFormatter stringFromDate:end] forKey:@"end"];
                 
-                for (NSUInteger iHighLevel=0; iHighLevel < [highLevelRange count]; iHighLevel++) {
-                    
-                    NSMutableDictionary *highLevelDict = [NSMutableDictionary dictionaryWithDictionary:[highLevelRange objectAtIndex:iHighLevel]];
-                    highLevelDict[@"numberOfSteps"] = @0;
-                    if (iHighLevel == 0) {
-                        highLevelDict[@"numberOfSteps"] = lowLevelDict[@"numberOfSteps"];
-                        highLevelDict[@"summarized"] = @1;
-                    }
-                    [values addObject:highLevelDict];
-                    
-                    if ( iLowLevel+1 ==  [lowLevelStepData count] && iHighLevel+1 == [highLevelRange count] ) {
-                        completionBlock(values);
-                    }
-                    
+                [values addObject:range];
+                
+                if (i+1 == [ranges count]) {
+                    completionBlock((NSArray*)values);
                 }
-                
-            }
+            }];
+
         }
+        
     }];
 }
+
+
+-(void)buildQueryDateRanges:(NSDate*)startDate EndDate:(NSDate*)endDate Completion:(void (^)(NSArray*values))completionBlock
+{
+    NSTimeInterval diff = [endDate timeIntervalSince1970] - [startDate timeIntervalSince1970];
+    
+    if ( diff < LOW_LEVEL_TIME_INTERVAL) {
+        completionBlock([self getDateRangesWithStartDate:startDate EndDate:endDate TimeInterval:HIGH_LEVEL_TIME_INTERVAL]);
+    } else {
+        NSMutableArray *ranges = [NSMutableArray array];
+        
+        [self queryDataWithStartDate:startDate EndDate:endDate TimeInterval:LOW_LEVEL_TIME_INTERVAL Completion:^(NSArray *lowLevelStepData) {
+            
+            for (NSDictionary *lowLevelDict in lowLevelStepData) {
+                if ([[lowLevelDict objectForKey:@"numberOfSteps"] integerValue] >= HIGH_LEVEL_MIN_STEP_COUNT) {
+                    //NSLog(@"high level %@ - %@ => %lu", [lowLevelDict objectForKey:@"start"], [lowLevelDict objectForKey:@"end"], [[lowLevelDict objectForKey:@"numberOfSteps"] integerValue]);
+                    [ranges addObjectsFromArray:[self getDateRangesWithStartDate:[lowLevelDict objectForKey:@"start"] EndDate:[lowLevelDict objectForKey:@"end"] TimeInterval:HIGH_LEVEL_TIME_INTERVAL]];
+                } else {
+                    //NSLog(@"low level %@ - %@ => %lu", [lowLevelDict objectForKey:@"start"], [lowLevelDict objectForKey:@"end"], [[lowLevelDict objectForKey:@"numberOfSteps"] integerValue]);
+                    [ranges addObject:@{@"start": [lowLevelDict objectForKey:@"start"], @"end": [lowLevelDict objectForKey:@"end"], @"summarized": @1 }];
+                }
+            }
+            completionBlock((NSArray*)ranges);
+        }];
+    }
+    
+}
+
 
 -(void)queryDataWithStartDate:(NSDate*)startDate EndDate:(NSDate*)endDate TimeInterval:(NSTimeInterval)interval Completion:(void (^)(NSArray*stepData))completionBlock
 {
@@ -232,7 +225,8 @@
         NSMutableDictionary *range = [NSMutableDictionary dictionaryWithDictionary:[dateRanges objectAtIndex:i]];
         
         [self.pedometer queryPedometerDataFromDate:range[@"start"] toDate:range[@"end"] withHandler:^(CMPedometerData *pedometerData, NSError *error) {
-            range[@"numberOfSteps"] = [CMPedometer isStepCountingAvailable] && pedometerData.numberOfSteps ? pedometerData.numberOfSteps : [NSNumber numberWithInt:0];
+            NSNumber *numberOfSteps = [CMPedometer isStepCountingAvailable] && pedometerData.numberOfSteps ? pedometerData.numberOfSteps : [NSNumber numberWithInt:0];
+            [range setObject:numberOfSteps forKey:@"numberOfSteps"];
             [values addObject:range];
             
             if (i+1 == [dateRanges count]) {
@@ -242,6 +236,7 @@
         
     }
 }
+
 
 -(NSArray*)getDateRangesWithStartDate:(NSDate*)startDate EndDate:(NSDate*)endDate TimeInterval:(NSTimeInterval)interval
 {
