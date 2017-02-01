@@ -7,7 +7,7 @@
 #### Latest version from GitHub
 
 ```
-cordova plugin add https://github.com/webulos-nejdet/cordova-plugin-pedometer.git
+cordova plugin add https://github.com/nejcet/cordova-plugin-pedometer.git
 ```
 
 You **do not** need to reference any JavaScript, the Cordova plugin architecture will add a pedometer object to your root automatically when you build.
