@@ -126,21 +126,13 @@
     NSDate* startDate = [dateFormatter dateFromString:[args objectForKey:@"startDate"]];
     NSDate* endDate = [dateFormatter dateFromString:[args objectForKey:@"endDate"]];
     
-    //NSLog(@"queryHistoryData: %@ - %@", startDate, endDate);
-    
     __block CDVPluginResult* pluginResult = nil;
     
     if ([CMPedometer isStepCountingAvailable]) {
-        
-        NSDate *started = [NSDate date];
-        
         [self queryHistoryDataWithStartDate:startDate EndDate:endDate Completion:^(NSArray *values) {
-            NSTimeInterval diff = [[NSDate date] timeIntervalSince1970] - [started timeIntervalSince1970];
-            NSLog(@"values count: %lu, diff: %f", (unsigned long)[values count], diff);
             pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:values];
             [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
         }];
-    
     } else {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Step counting not available."];
         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
@@ -192,8 +184,6 @@
 -(void)buildQueryDateRanges:(NSDate*)startDate EndDate:(NSDate*)endDate Completion:(void (^)(NSArray*values))completionBlock
 {
     NSTimeInterval diff = [endDate timeIntervalSince1970] - [startDate timeIntervalSince1970];
-    
-    NSLog(@"diff: %f < %f", diff, LOW_LEVEL_TIME_INTERVAL);
     
     if ( diff < LOW_LEVEL_TIME_INTERVAL) {
         completionBlock([self getDateRangesWithStartDate:startDate EndDate:endDate TimeInterval:HIGH_LEVEL_TIME_INTERVAL]);
