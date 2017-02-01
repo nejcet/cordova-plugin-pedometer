@@ -129,19 +129,27 @@
     
     __block CDVPluginResult* pluginResult = nil;
     
-    NSDate *started = [NSDate date];
-    
-    [self queryHistoryDataWithStartDate:startDate EndDate:endDate Completion:^(NSArray *values) {
-        NSMutableArray *normalizedValues = [NSMutableArray array];
-        for (NSDictionary *value in values) {
-            [normalizedValues addObject:[self normalizeValue:value]];
-        }
-        NSTimeInterval diff = [[NSDate date] timeIntervalSince1970] - [started timeIntervalSince1970];
-        NSLog(@"values count: %lu, diff: %f", (unsigned long)[normalizedValues count], diff);
+    if ([CMPedometer isStepCountingAvailable]) {
         
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:normalizedValues];
+        NSDate *started = [NSDate date];
+        
+        [self queryHistoryDataWithStartDate:startDate EndDate:endDate Completion:^(NSArray *values) {
+            NSMutableArray *normalizedValues = [NSMutableArray array];
+            for (NSDictionary *value in values) {
+                [normalizedValues addObject:[self normalizeValue:value]];
+            }
+            NSTimeInterval diff = [[NSDate date] timeIntervalSince1970] - [started timeIntervalSince1970];
+            NSLog(@"values count: %lu, diff: %f", (unsigned long)[normalizedValues count], diff);
+            
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:normalizedValues];
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        }];
+    
+    } else {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Step counting not available."];
         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-    }];
+    }
+    
 
 }
 
@@ -167,13 +175,14 @@
 -(void)queryHistoryDataWithStartDate:(NSDate*)startDate EndDate:(NSDate*)endDate Completion:(void (^)(NSArray*values))completionBlock
 {
     NSMutableArray *values = [NSMutableArray array];
+    NSTimeInterval diff = [endDate timeIntervalSince1970] - [startDate timeIntervalSince1970];
     
     [self queryDataWithStartDate:startDate EndDate:endDate TimeInterval:LOW_LEVEL_TIME_INTERVAL Completion:^(NSArray *lowLevelStepData) {
         for (NSUInteger iLowLevel = 0; iLowLevel < [lowLevelStepData count]; iLowLevel++) {
             NSDictionary *lowLevelDict = [lowLevelStepData objectAtIndex:iLowLevel];
             
             
-            if ([lowLevelDict[@"steps"] integerValue] >= LOW_LEVEL_MIN_STEP_COUNT) {
+            if (diff < LOW_LEVEL_TIME_INTERVAL || [lowLevelDict[@"numberOfSteps"] integerValue] >= LOW_LEVEL_MIN_STEP_COUNT) {
                 [self queryDataWithStartDate:lowLevelDict[@"start"] EndDate:lowLevelDict[@"end"] TimeInterval:HIGH_LEVEL_TIME_INTERVAL Completion:^(NSArray *highLevelStepData) {
                     
                     for (NSUInteger iHighLevel=0; iHighLevel < [highLevelStepData count]; iHighLevel++) {
@@ -196,9 +205,9 @@
                 for (NSUInteger iHighLevel=0; iHighLevel < [highLevelRange count]; iHighLevel++) {
                     
                     NSMutableDictionary *highLevelDict = [NSMutableDictionary dictionaryWithDictionary:[highLevelRange objectAtIndex:iHighLevel]];
-                    highLevelDict[@"steps"] = @0;
+                    highLevelDict[@"numberOfSteps"] = @0;
                     if (iHighLevel == 0) {
-                        highLevelDict[@"steps"] = lowLevelDict[@"steps"];
+                        highLevelDict[@"numberOfSteps"] = lowLevelDict[@"numberOfSteps"];
                         highLevelDict[@"summarized"] = @1;
                     }
                     [values addObject:highLevelDict];
@@ -223,7 +232,7 @@
         NSMutableDictionary *range = [NSMutableDictionary dictionaryWithDictionary:[dateRanges objectAtIndex:i]];
         
         [self.pedometer queryPedometerDataFromDate:range[@"start"] toDate:range[@"end"] withHandler:^(CMPedometerData *pedometerData, NSError *error) {
-            range[@"steps"] = [CMPedometer isStepCountingAvailable] && pedometerData.numberOfSteps ? pedometerData.numberOfSteps : [NSNumber numberWithInt:0];
+            range[@"numberOfSteps"] = [CMPedometer isStepCountingAvailable] && pedometerData.numberOfSteps ? pedometerData.numberOfSteps : [NSNumber numberWithInt:0];
             [values addObject:range];
             
             if (i+1 == [dateRanges count]) {
