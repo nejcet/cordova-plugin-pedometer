@@ -95,6 +95,28 @@ var options = {
 pedometer.queryData(successHandler, onError, options);
 ```
 
+### queryHistoryData
+
+Retrieves the data between the specified start and end dates (minute interval).
+
+The `startDate` and `endDate` options are required and can be constructed in any valid JavaScript way (e.g. `new Date(2015, 4, 1, 15, 20, 00)` is also valid, as is milliseconds).
+
+```js
+var successHandler = function (values) {
+    values.map(function(pedometerData){
+        // pedometerData.steps;
+        // pedometerData.start;
+        // pedometerData.end;
+        // pedometerData.summarized;
+    });
+};
+var options = {
+    "startDate": new Date("Fri May 01 2015 15:20:00"),
+    "endDate": new Date("Fri May 01 2015 15:25:00")
+};
+pedometer.queryData(successHandler, onError, options);
+```
+
 ## Platform and device support
 
 - iOS 8+. These capabilities are not supported on all devices, even with iOS 8, so please ensure you use the *check feature support* functions.
