@@ -107,6 +107,9 @@ var successHandler = function (values) {
         // pedometerData.steps;
         // pedometerData.start;
         // pedometerData.end;
+        // pedometerData.distance;
+        // pedometerData.floorsAscended;
+        // pedometerData.floorsDescended;
         // pedometerData.summarized;
     });
 };
