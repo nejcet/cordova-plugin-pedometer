@@ -161,7 +161,14 @@
             [self.pedometer queryPedometerDataFromDate:range[@"start"] toDate:range[@"end"] withHandler:^(CMPedometerData *pedometerData, NSError *error) {
                 
                 NSNumber *numberOfSteps = [CMPedometer isStepCountingAvailable] && pedometerData.numberOfSteps ? pedometerData.numberOfSteps : [NSNumber numberWithInt:0];
+                NSNumber *distance = [CMPedometer isDistanceAvailable] && pedometerData.distance ? pedometerData.distance : [NSNumber numberWithInt:0];
+                NSNumber *floorsAscended = [CMPedometer isFloorCountingAvailable] && pedometerData.floorsAscended ? pedometerData.floorsAscended : [NSNumber numberWithInt:0];
+                NSNumber *floorsDescended = [CMPedometer isFloorCountingAvailable] && pedometerData.floorsDescended ? pedometerData.floorsDescended : [NSNumber numberWithInt:0];
+
                 [range setObject:numberOfSteps forKey:@"numberOfSteps"];
+                [range setObject:distance forKey:@"distance"];
+                [range setObject:floorsAscended forKey:@"floorsAscended"];
+                [range setObject:floorsDescended forKey:@"floorsDescended"];
                 
                 NSDate *start = [range objectForKey:@"start"];
                 NSDate *end = [range objectForKey:@"end"];
